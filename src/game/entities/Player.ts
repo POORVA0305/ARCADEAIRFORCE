@@ -1,15 +1,26 @@
 export class Player {
-  x:number;
-  y:number;
+  x: number;
+  y: number;
 
-  health:number;
-  speed:number;
+  width: number;
+  height: number;
+
+  health: number;
+  speed: number;
 
   constructor() {
-    this.x = 0;
-    this.y = 0;
+    this.x = 150;
+    this.y = 500;
+
+    this.width = 80;
+    this.height = 80;
 
     this.health = 100;
     this.speed = 5;
+  }
+
+  move(newX: number, newY: number) {
+    this.x = newX;
+    this.y = newY;
   }
 }

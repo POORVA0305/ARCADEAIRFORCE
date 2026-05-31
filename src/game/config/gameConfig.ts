@@ -1,10 +1,13 @@
+import { Dimensions } from "react-native";
+
+const { width, height } = Dimensions.get("window");
+
 export const GAME_CONFIG = {
-  PLAYER_SPEED: 5,
+  SCREEN_WIDTH: width,
+  SCREEN_HEIGHT: height,
+
+  PLAYER_WIDTH: 80,
+  PLAYER_HEIGHT: 80,
+
   PLAYER_HEALTH: 100,
-  PLAYER_DAMAGE: 10,
-
-  ENEMY_HEALTH: 20,
-
-  SCREEN_WIDTH: 400,
-  SCREEN_HEIGHT: 800,
 };
