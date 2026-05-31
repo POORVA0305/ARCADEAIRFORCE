@@ -1,4 +1,10 @@
-import React, { useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+
 import {
   Dimensions,
   Image,
@@ -8,15 +14,72 @@ import {
   View,
 } from "react-native";
 
+import { Bullet } from "../src/game/entities/Bullet";
+
 const { width, height } = Dimensions.get("window");
 
 const PLAYER_SIZE = 100;
+const BULLET_WIDTH = 20;
+const BULLET_HEIGHT = 40;
 
 export default function Gameplay() {
   const [playerPosition, setPlayerPosition] = useState({
     x: width / 2 - PLAYER_SIZE / 2,
     y: height - 180,
   });
+
+  const [bullets, setBullets] = useState<Bullet[]>([]);
+  const playerPositionRef = useRef(playerPosition);
+
+  const bulletCounter = useRef(0);
+  useEffect(() => {
+  playerPositionRef.current = playerPosition;
+}, [playerPosition]);
+  
+  // Auto Fire
+useEffect(() => {
+  const fireInterval = setInterval(() => {
+    const currentPosition =
+      playerPositionRef.current;
+
+    const newBullet: Bullet = {
+      id: bulletCounter.current++,
+
+      x:
+        currentPosition.x +
+        PLAYER_SIZE / 2 -
+        BULLET_WIDTH / 2,
+
+      y: currentPosition.y,
+    };
+
+    setBullets((prev) => [
+      ...prev,
+      newBullet,
+    ]);
+  }, 200);
+
+  return () => clearInterval(fireInterval);
+}, []);
+
+  // Bullet Movement
+  useEffect(() => {
+    const moveInterval = setInterval(() => {
+      setBullets((prev) =>
+        prev
+          .map((bullet) => ({
+            ...bullet,
+            y: bullet.y - 12,
+          }))
+          .filter(
+            (bullet) =>
+              bullet.y > -BULLET_HEIGHT
+          )
+      );
+    }, 16);
+
+    return () => clearInterval(moveInterval);
+  }, []);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -26,9 +89,15 @@ export default function Gameplay() {
       let x = gesture.moveX - PLAYER_SIZE / 2;
       let y = gesture.moveY - PLAYER_SIZE / 2;
 
-      // Keep plane inside screen
-      x = Math.max(0, Math.min(x, width - PLAYER_SIZE));
-      y = Math.max(0, Math.min(y, height - PLAYER_SIZE));
+      x = Math.max(
+        0,
+        Math.min(x, width - PLAYER_SIZE)
+      );
+
+      y = Math.max(
+        0,
+        Math.min(y, height - PLAYER_SIZE)
+      );
 
       setPlayerPosition({
         x,
@@ -38,7 +107,10 @@ export default function Gameplay() {
   });
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View
+      style={styles.container}
+      {...panResponder.panHandlers}
+    >
       {/* Background */}
       <Image
         source={require("../assets/backgrounds/ocean_bg.png")}
@@ -50,6 +122,21 @@ export default function Gameplay() {
         <Text style={styles.text}>❤️ 100</Text>
         <Text style={styles.text}>⭐ 0</Text>
       </View>
+
+      {/* Bullets */}
+      {bullets.map((bullet) => (
+        <Image
+          key={bullet.id}
+          source={require("../assets/bullets/bullet.png")}
+          style={{
+            position: "absolute",
+            width: BULLET_WIDTH,
+            height: BULLET_HEIGHT,
+            left: bullet.x,
+            top: bullet.y,
+          }}
+        />
+      ))}
 
       {/* Player Aircraft */}
       <Image
@@ -73,8 +160,8 @@ const styles = StyleSheet.create({
 
   background: {
     position: "absolute",
-    width: width,
-    height: height,
+    width,
+    height,
     resizeMode: "cover",
   },
 
