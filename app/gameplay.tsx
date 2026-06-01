@@ -1,3 +1,5 @@
+import { Enemy } from "../src/game/entities/Enemy";
+
 import React, {
   useEffect,
   useRef,
@@ -21,6 +23,8 @@ const { width, height } = Dimensions.get("window");
 const PLAYER_SIZE = 100;
 const BULLET_WIDTH = 20;
 const BULLET_HEIGHT = 40;
+const ENEMY_SIZE = 80;
+const ENEMY_SPEED = 4;
 
 export default function Gameplay() {
   const [playerPosition, setPlayerPosition] = useState({
@@ -29,6 +33,9 @@ export default function Gameplay() {
   });
 
   const [bullets, setBullets] = useState<Bullet[]>([]);
+  const [enemies, setEnemies] = useState<Enemy[]>([]);
+
+  const enemyCounter = useRef(0);
   const playerPositionRef = useRef(playerPosition);
 
   const bulletCounter = useRef(0);
@@ -62,6 +69,28 @@ useEffect(() => {
   return () => clearInterval(fireInterval);
 }, []);
 
+useEffect(() => {
+  const spawnInterval = setInterval(() => {
+    const newEnemy: Enemy = {
+      id: enemyCounter.current++,
+
+      x: Math.random() * (width - ENEMY_SIZE),
+
+      y: -ENEMY_SIZE,
+
+      health: 1,
+    };
+
+    setEnemies((prev) => [
+      ...prev,
+      newEnemy,
+    ]);
+  }, 1500);
+
+  return () =>
+    clearInterval(spawnInterval);
+}, []);
+
   // Bullet Movement
   useEffect(() => {
     const moveInterval = setInterval(() => {
@@ -80,6 +109,25 @@ useEffect(() => {
 
     return () => clearInterval(moveInterval);
   }, []);
+
+  useEffect(() => {
+  const moveEnemies = setInterval(() => {
+    setEnemies((prev) =>
+      prev
+        .map((enemy) => ({
+          ...enemy,
+          y: enemy.y + ENEMY_SPEED,
+        }))
+        .filter(
+          (enemy) =>
+            enemy.y < height + ENEMY_SIZE
+        )
+    );
+  }, 16);
+
+  return () =>
+    clearInterval(moveEnemies);
+}, []);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -137,6 +185,21 @@ useEffect(() => {
           }}
         />
       ))}
+
+      {/* Enemies */}
+  {enemies.map((enemy) => (
+  <Image
+    key={enemy.id}
+    source={require("../assets/enemies/enemy1.png")}
+    style={{
+      position: "absolute",
+      width: ENEMY_SIZE,
+      height: ENEMY_SIZE,
+      left: enemy.x,
+      top: enemy.y,
+    }}
+  />
+  ))}
 
       {/* Player Aircraft */}
       <Image
