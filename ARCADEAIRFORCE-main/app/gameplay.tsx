@@ -3,6 +3,7 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -24,6 +25,40 @@ const FIRE_INTERVAL = 200;
 type GameEnemy = Enemy & { type: "enemy1" | "enemy2" };
 type Explosion = { id: number; x: number; y: number };
 
+// Synthesised descending game-over jingle via Web Audio API (web only)
+function playGameOverSound() {
+  if (Platform.OS !== "web") return;
+  try {
+    const AudioCtx =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx() as AudioContext;
+    const notes = [
+      { freq: 523, start: 0.0 },
+      { freq: 415, start: 0.22 },
+      { freq: 349, start: 0.44 },
+      { freq: 262, start: 0.66 },
+    ];
+    notes.forEach(({ freq, start }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + start + 0.2
+      );
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + 0.22);
+    });
+  } catch (_) {
+    // Audio not available in this environment
+  }
+}
+
 const PLANE_IMAGES: Record<string, ReturnType<typeof require>> = {
   green: require("../assets/aircraft/green_player.png"),
   red: require("../assets/aircraft/red_player.png"),
@@ -43,6 +78,7 @@ export default function Gameplay() {
   const levelRef = useRef(1);
   const enemySpeedRef = useRef(BASE_ENEMY_SPEED);
   const isGameOverRef = useRef(false);
+  const isTouchingRef = useRef(false);
   const bulletCounter = useRef(0);
   const enemyCounter = useRef(0);
   const expCounter = useRef(0);
@@ -94,10 +130,10 @@ export default function Gameplay() {
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-fire: spawn a bullet every 200ms
+  // Auto-fire: spawn a bullet every 200ms, only while the player is touching the plane
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isGameOverRef.current) return;
+      if (isGameOverRef.current || !isTouchingRef.current) return;
       const pos = playerPosRef.current;
       bulletsRef.current = [
         ...bulletsRef.current,
@@ -129,7 +165,8 @@ export default function Gameplay() {
             id: enemyCounter.current++,
             x: Math.random() * (width - ENEMY_SIZE),
             y: -ENEMY_SIZE,
-            health: 1,
+            // enemy2 takes 2 bullets to destroy
+            health: type === "enemy2" ? 2 : 1,
             type,
           },
         ];
@@ -161,27 +198,71 @@ export default function Gameplay() {
         y: e.y + speed,
       }));
 
-      // Collision detection
+      // Collision detection — damage based (enemy2 needs 2 hits)
       const hitBullets = new Set<number>();
-      const hitEnemies = new Set<number>();
+      // enemyId → bullets that hit it this frame
+      const enemyDamage = new Map<number, number>();
       const newExps: Explosion[] = [];
 
       for (const b of newBullets) {
+        if (hitBullets.has(b.id)) continue;
         for (const e of newEnemies) {
-          if (!hitBullets.has(b.id) && !hitEnemies.has(e.id)) {
-            if (checkCollision(b, e)) {
-              hitBullets.add(b.id);
-              hitEnemies.add(e.id);
-              scoreRef.current += 10;
-              newExps.push({ id: expCounter.current++, x: e.x, y: e.y });
-            }
+          if (checkCollision(b, e)) {
+            hitBullets.add(b.id);
+            enemyDamage.set(e.id, (enemyDamage.get(e.id) ?? 0) + 1);
+            break;
           }
         }
       }
 
-      // Enemies that slipped past the bottom (not hit) cost a life each
+      // Apply damage; only destroy when health reaches 0
+      const destroyedEnemyIds = new Set<number>();
+      newEnemies = newEnemies.map((e) => {
+        const dmg = enemyDamage.get(e.id) ?? 0;
+        if (dmg === 0) return e;
+        const remaining = e.health - dmg;
+        if (remaining <= 0) {
+          destroyedEnemyIds.add(e.id);
+          scoreRef.current += 10;
+          newExps.push({ id: expCounter.current++, x: e.x, y: e.y });
+          return e; // filtered out below
+        }
+        return { ...e, health: remaining };
+      });
+
+      // Player-enemy collision: enemy body touches player → lose 1 life, remove enemy
+      const { x: px, y: py } = playerPosRef.current;
+      const playerHitIds = new Set<number>();
+
+      for (const e of newEnemies) {
+        if (destroyedEnemyIds.has(e.id)) continue;
+        if (
+          px < e.x + ENEMY_SIZE &&
+          px + PLAYER_SIZE > e.x &&
+          py < e.y + ENEMY_SIZE &&
+          py + PLAYER_SIZE > e.y
+        ) {
+          playerHitIds.add(e.id);
+        }
+      }
+
+      if (playerHitIds.size > 0) {
+        livesRef.current = Math.max(0, livesRef.current - playerHitIds.size);
+        setLives(livesRef.current);
+        if (livesRef.current <= 0) {
+          isGameOverRef.current = true;
+          playGameOverSound();
+          setGameOver(true);
+          return;
+        }
+      }
+
+      // Enemies that slipped past the bottom (not destroyed/hit) cost a life each
       const escaped = newEnemies.filter(
-        (e) => e.y >= height + ENEMY_SIZE && !hitEnemies.has(e.id)
+        (e) =>
+          e.y >= height + ENEMY_SIZE &&
+          !destroyedEnemyIds.has(e.id) &&
+          !playerHitIds.has(e.id)
       );
 
       if (escaped.length > 0) {
@@ -189,15 +270,19 @@ export default function Gameplay() {
         setLives(livesRef.current);
         if (livesRef.current <= 0) {
           isGameOverRef.current = true;
+          playGameOverSound();
           setGameOver(true);
           return;
         }
       }
 
-      // Remove collided / escaped entities
+      // Remove destroyed / player-hit / escaped entities
       newBullets = newBullets.filter((b) => !hitBullets.has(b.id));
       newEnemies = newEnemies.filter(
-        (e) => !hitEnemies.has(e.id) && e.y < height + ENEMY_SIZE
+        (e) =>
+          !destroyedEnemyIds.has(e.id) &&
+          !playerHitIds.has(e.id) &&
+          e.y < height + ENEMY_SIZE
       );
 
       bulletsRef.current = newBullets;
@@ -206,8 +291,10 @@ export default function Gameplay() {
       setBullets([...newBullets]);
       setEnemies([...newEnemies]);
 
-      if (newExps.length > 0) {
+      if (newExps.length > 0 || enemyDamage.size > 0) {
         setScore(scoreRef.current);
+      }
+      if (newExps.length > 0) {
         setExplosions((prev) => [...prev, ...newExps]);
         // Remove each explosion after 500ms
         const ids = new Set(newExps.map((e) => e.id));
@@ -223,7 +310,11 @@ export default function Gameplay() {
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      isTouchingRef.current = true;
+    },
     onPanResponderMove: (_, g) => {
+      isTouchingRef.current = true;
       const x = Math.max(
         0,
         Math.min(g.moveX - PLAYER_SIZE / 2, width - PLAYER_SIZE)
@@ -234,6 +325,12 @@ export default function Gameplay() {
       );
       playerPosRef.current = { x, y };
       setPlayerPosition({ x, y });
+    },
+    onPanResponderRelease: () => {
+      isTouchingRef.current = false;
+    },
+    onPanResponderTerminate: () => {
+      isTouchingRef.current = false;
     },
   });
 

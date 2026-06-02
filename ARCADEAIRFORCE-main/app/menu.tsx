@@ -11,6 +11,11 @@ import { router } from "expo-router";
 
 const PLANES = [
   {
+    key: "default",
+    label: "Classic",
+    source: require("../assets/aircraft/player.png"),
+  },
+  {
     key: "green",
     label: "Green Eagle",
     source: require("../assets/aircraft/green_player.png"),
@@ -23,7 +28,7 @@ const PLANES = [
 ];
 
 export default function Menu() {
-  const [selectedPlane, setSelectedPlane] = useState("green");
+  const [selectedPlane, setSelectedPlane] = useState("default");
 
   return (
     <ImageBackground
@@ -98,27 +103,27 @@ const styles = StyleSheet.create({
   },
   planeRow: {
     flexDirection: "row",
-    gap: 24,
+    gap: 14,
     marginBottom: 52,
   },
   planeCard: {
-    width: 130,
-    height: 160,
+    width: 100,
+    height: 148,
     backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 16,
     borderWidth: 2.5,
     borderColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    padding: 10,
+    padding: 8,
   },
   planeCardSelected: {
     borderColor: "#ffd700",
     backgroundColor: "rgba(255,215,0,0.12)",
   },
   planeImage: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     resizeMode: "contain",
     marginBottom: 8,
   },
